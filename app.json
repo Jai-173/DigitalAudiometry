@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "frontend",
-    "slug": "frontend",
+    "name": "DigitalAudiometry",
+    "slug": "digital-audiometry",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/splashImage.png",
@@ -35,7 +35,7 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
+          "image": "./assets/images/splashImage.png",
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#ffffff",
@@ -53,10 +53,8 @@
       "reactCompiler": true
     },
     "extra": {
-      "router": {},
-      "eas": {
-        "projectId": "1ff8b95a-8d88-4d2c-957b-7a648183057c"
-      }
+      "router": {}
+      
     }
   }
 }
