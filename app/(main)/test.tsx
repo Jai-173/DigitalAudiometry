@@ -26,24 +26,6 @@ export default function TestScreen() {
         </Animated.View>
 
         <View style={styles.contentContainer}>
-          {/* <AnimatedTouchable
-            entering={FadeInDown.duration(600).delay(100).springify()}
-            style={styles.btnSecondary}
-            onPress={() => router.push(("/(main)/calibrate") as any)}
-            activeOpacity={0.8}
-          >
-            <Typo style={styles.btnTextSecondary}>Calibrate Headphones</Typo>
-          </AnimatedTouchable>
-
-          <Animated.View 
-            entering={FadeInDown.duration(600).delay(200).springify()}
-            style={styles.dividerContainer}
-          >
-            <View style={styles.divider} />
-            <Typo style={styles.dividerText}>or start directly</Typo>
-            <View style={styles.divider} />
-          </Animated.View> */}
-
           <View style={styles.earButtons}>
             <AnimatedTouchable
               entering={FadeInDown.duration(600).delay(300).springify()}

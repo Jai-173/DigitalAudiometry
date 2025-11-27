@@ -55,15 +55,10 @@ export default function Login() {
       return;
     }
 
-    // Start loading
     setIsLoading(true);
-
+    
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      // Handle successful login here
-      router.replace("/(main)/frontpage");
+      await new Promise(resolve => setTimeout(resolve, 2000));      router.replace("/(main)/frontpage");
     } catch (error) {
       setPasswordError("Login failed. Please try again.");
     } finally {

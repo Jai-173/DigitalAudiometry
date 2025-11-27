@@ -26,7 +26,6 @@ export default function ResultsScreen() {
     ear?: string;
   }>();
 
-  // Parse results with dbLevel (not volume)
   let parsed: { freq: number; dbLevel: number }[] = [];
   try {
     parsed = results ? JSON.parse(results) : [];
@@ -34,7 +33,6 @@ export default function ResultsScreen() {
     console.error("Error parsing results:", err);
   }
 
-  // Use dbLevel directly
   const thresholds = parsed.map((item) => ({
     freq: item.freq,
     db: Math.round(item.dbLevel),
@@ -50,24 +48,20 @@ export default function ResultsScreen() {
   const yPaddingTop = 15;
   const yPaddingBottom = 30;
 
-  // X and Y scale functions
   const xScale = (freq: number) =>
     xPadding +
     (FREQUENCIES.indexOf(freq) / (FREQUENCIES.length - 1)) *
       (CHART_WIDTH - 2 * xPadding);
 
-  // Higher dB = lower on graph
   const yScale = (db: number) =>
     yPaddingTop +
     ((110 - db) / 110) * (CHART_HEIGHT - yPaddingTop - yPaddingBottom);
 
-  // Average dB threshold
   const avgThreshold =
     thresholds.length > 0
       ? Math.round(thresholds.reduce((sum, t) => sum + t.db, 0) / thresholds.length)
       : 0;
 
-  // Hearing level classification (based on dB HL)
   const getHearingLevel = (avg: number) => {
     if (avg <= 25) return { label: "Normal", color: colors.green };
     if (avg <= 40) return { label: "Mild Loss", color: colors.blue };
@@ -135,7 +129,6 @@ export default function ResultsScreen() {
               fill={colors.neutral100}
             />
 
-            {/* Horizontal grid lines */}
             {DB_LEVELS.map((db) => (
               <Line
                 key={`grid-${db}`}
@@ -149,7 +142,6 @@ export default function ResultsScreen() {
               />
             ))}
 
-            {/* Vertical grid lines */}
             {FREQUENCIES.map((f) => (
               <Line
                 key={`vgrid-${f}`}
@@ -163,7 +155,6 @@ export default function ResultsScreen() {
               />
             ))}
 
-            {/* Y-axis labels */}
             {DB_LEVELS.map((db) => (
               <SvgText
                 key={`ylabel-${db}`}
@@ -178,7 +169,6 @@ export default function ResultsScreen() {
               </SvgText>
             ))}
 
-            {/* X-axis labels */}
             {FREQUENCIES.map((f) => (
               <SvgText
                 key={`xlabel-${f}`}
@@ -193,7 +183,6 @@ export default function ResultsScreen() {
               </SvgText>
             ))}
 
-            {/* Axis titles */}
             <SvgText
               x={xPadding - 30}
               y={CHART_HEIGHT / 2}
@@ -217,7 +206,6 @@ export default function ResultsScreen() {
               Frequency (Hz)
             </SvgText>
 
-            {/* Left Ear */}
             {showLeft && (
               <>
                 <Polyline
@@ -256,7 +244,6 @@ export default function ResultsScreen() {
               </>
             )}
 
-            {/* Right Ear */}
             {showRight && (
               <>
                 <Polyline

@@ -24,7 +24,6 @@ export default function Register() {
       style={styles.background}
       resizeMode="cover"
     >
-      {/* Overlay for better text readability */}
       <View style={styles.overlay} />
       
       <KeyboardAvoidingView 
@@ -144,7 +143,7 @@ const styles = StyleSheet.create({
   },
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: colors.neutral900 + "CC", // Semi-transparent overlay
+    backgroundColor: colors.neutral900 + "CC",
   },
   keyboardView: {
     flex: 1,

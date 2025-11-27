@@ -11,20 +11,18 @@ import { Entypo } from '@expo/vector-icons';
 
 const AnimatedTouchable = Animated.createAnimatedComponent(TouchableOpacity);
 
-// Standard reference values for calibration
 const CALIBRATION = {
-  REFERENCE_FREQ: 1000,  // 1 kHz reference tone
-  REFERENCE_DB: 40,      // Reference level in dB HL
-  MAX_SAFE_DB: 85,       // Safety limit
+  REFERENCE_FREQ: 1000,
+  REFERENCE_DB: 40,
+  MAX_SAFE_DB: 85,
 };
 
 export default function CalibrateScreen() {
   const router = useRouter();
   const [isPlaying, setIsPlaying] = useState(false);
-  const [calibratedVolume, setCalibratedVolume] = useState(0.5); // Initial mid-level volume
+  const [calibratedVolume, setCalibratedVolume] = useState(0.5);
   const pulseAnim = useSharedValue(1);
 
-  // Use 1kHz tone for calibration as it's the reference frequency
   const player = useAudioPlayer(require("../../assets/sounds/left_1000hz.wav"));
   const status = useAudioPlayerStatus(player);
 
@@ -50,10 +48,8 @@ export default function CalibrateScreen() {
     transform: [{ scale: pulseAnim.value }],
   }));
 
-  // Convert dB HL to digital amplitude for 1kHz reference tone
   function getReferenceVolume(dbHL: number): number {
-    // Reference tone conversion (1kHz specific)
-    const dbSPL = dbHL + 20; // Convert dB HL to dB SPL
+    const dbSPL = dbHL + 20;
     const amplitude = Math.pow(10, (dbSPL - 110) / 20);
     return Math.min(1, Math.max(0, amplitude));
   }
@@ -65,13 +61,11 @@ export default function CalibrateScreen() {
         await player.pause();
         setIsPlaying(false);
       } else {
-        // Set reference volume for calibration
         player.volume = getReferenceVolume(CALIBRATION.REFERENCE_DB);
         await player.seekTo(0);
         await player.play();
         setIsPlaying(true);
 
-        // Auto-stop after 2 seconds for consistent calibration
         setTimeout(async () => {
           if (player) {
             try {
@@ -87,7 +81,6 @@ export default function CalibrateScreen() {
     }
   }
 
-  // Cleanup resources
   React.useEffect(() => {
     return () => {
       if (player) {

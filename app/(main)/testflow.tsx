@@ -13,21 +13,20 @@ const AnimatedTouchable = Animated.createAnimatedComponent(TouchableOpacity);
 
 const FREQUENCIES = [250, 500, 1000, 2000, 4000, 8000];
 
-// Calibration reference values for each frequency (in dB)
 const CALIBRATION_REFS: Record<number, number> = {
-  250: -20,   // Reference offset for 250 Hz
-  500: -15,   // Reference offset for 500 Hz
-  1000: 0,    // Reference frequency (no offset)
-  2000: 5,    // Reference offset for 2 kHz
-  4000: 10,   // Reference offset for 4 kHz
-  8000: 15,   // Reference offset for 8 kHz
+  250: -20,
+  500: -15,
+  1000: 0,
+  2000: 5,
+  4000: 10,
+  8000: 15,
 };
 
 export default function TestFlowScreen() {
   const router = useRouter();
   const { ear } = useLocalSearchParams<{ ear: string }>();
   const [index, setIndex] = useState(0);
-  const [dbLevel, setDbLevel] = useState(30); // start at 30 dB HL (typical starting level for audiometry)
+  const [dbLevel, setDbLevel] = useState(30);
   const [thresholds, setThresholds] = useState<any[]>([]);
 
   const freq = FREQUENCIES[index];
@@ -50,25 +49,15 @@ export default function TestFlowScreen() {
   const key = `${freq}_${ear?.toLowerCase()}`;
   const player = useAudioPlayer(soundMap[key]);
 
-  // Get calibration offset for current frequency
   function getCalibrationOffset(frequency: number): number {
     return CALIBRATION_REFS[frequency] || 0;
   }
 
-  // Convert dB HL to digital amplitude scaling with calibration
   function dbToVolume(dbHL: number, frequency: number): number {
-    // Apply frequency-specific calibration
     const calibratedDb = dbHL + getCalibrationOffset(frequency);
-    
-    // Convert dB HL to dB SPL (rough approximation, needs hardware calibration)
-    const dbSPL = calibratedDb + 20; // Add reference offset
-    
-    // Convert to amplitude using proper logarithmic scaling
-    // Maximum safe level is 110 dB SPL
+    const dbSPL = calibratedDb + 20;
     const maxDbSPL = 110;
     const amplitude = Math.pow(10, (dbSPL - maxDbSPL) / 20);
-    
-    // Clamp between 0 and 1 for valid volume
     return Math.min(1, Math.max(0, amplitude));
   }
   
@@ -98,7 +87,6 @@ export default function TestFlowScreen() {
     }
   }
 
-  // Cleanup audio resources when frequency changes or component unmounts
   React.useEffect(() => {
     return () => {
       if (player) {
@@ -111,18 +99,14 @@ export default function TestFlowScreen() {
 
   function handleDbUp() {
     setDbLevel((prev) => {
-      // Step size of 5 dB as per standard audiometry practice
       const newLevel = prev + 5;
-      // Maximum safe level is 90 dB HL (which translates to ~110 dB SPL with calibration)
       return Math.min(newLevel, 90);
     });
   }
 
   function handleDbDown() {
     setDbLevel((prev) => {
-      // Step size of 5 dB as per standard audiometry practice
       const newLevel = prev - 5;
-      // Minimum of -10 dB HL for fine threshold detection
       return Math.max(newLevel, -10);
     });
   }
@@ -133,7 +117,7 @@ export default function TestFlowScreen() {
 
     if (index < FREQUENCIES.length - 1) {
       setIndex(index + 1);
-      setDbLevel(40); // reset mid-level for next frequency
+      setDbLevel(40);
     } else {
       (router.push as any)({
         pathname: "/(main)/results",
@@ -161,7 +145,6 @@ export default function TestFlowScreen() {
   return (
     <ScreenWrapper showPattern>
       <View style={styles.container}>
-        {/* Header */}
         <Animated.View entering={FadeInUp.duration(600).springify()} style={styles.headerContainer}>
           <Typo style={styles.header}>
             {ear === "left" ? "Left" : "Right"} Ear Test
@@ -185,7 +168,6 @@ export default function TestFlowScreen() {
           </View>
         </Animated.View>
 
-        {/* Controls */}
         <Animated.View
           key={`freq-${freq}`}
           entering={FadeInDown.duration(500).springify()}
@@ -228,7 +210,6 @@ export default function TestFlowScreen() {
           </View>
         </Animated.View>
 
-        {/* Bottom buttons */}
         <View style={styles.buttonRow}>
           <AnimatedTouchable
             entering={FadeInUp.duration(600).delay(100).springify()}
@@ -275,7 +256,6 @@ export default function TestFlowScreen() {
           </AnimatedTouchable>
         </View>
 
-        {/* Instructions */}
         <Animated.View
           entering={FadeInUp.duration(600).delay(200).springify()}
           style={styles.instructionCard}
@@ -289,7 +269,6 @@ export default function TestFlowScreen() {
   );
 }
 
-// --- Styles (unchanged) ---
 const styles = StyleSheet.create({
   container: {
     flex: 1,

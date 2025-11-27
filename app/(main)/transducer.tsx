@@ -1,4 +1,3 @@
-// app/(main)/select-transducer.tsx
 import React from "react";
 import { View, TouchableOpacity, StyleSheet } from "react-native";
 import ScreenWrapper from "@/components/ScreenWrapper";
