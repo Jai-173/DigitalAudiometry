@@ -2,10 +2,24 @@ import { Stack } from "expo-router";
 import React from "react";
 import { StyleSheet } from "react-native";
 
-const _layout = () => {
-      return <Stack screenOptions={{ headerShown: false }} />;
+const RootLayout = () => {
+  return (
+    <Stack screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="index" options={{ headerShown: false }} />
+      <Stack.Screen 
+        name="(auth)" 
+        options={{ 
+          headerShown: false,
+        }} 
+      />
+      <Stack.Screen 
+        name="(main)" 
+        options={{ 
+          headerShown: false,
+        }} 
+      />
+    </Stack>
+  );
 };
 
-export default _layout;
-
-const styles = StyleSheet.create({});
+export default RootLayout;

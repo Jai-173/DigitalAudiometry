@@ -24,7 +24,6 @@ export default function Register() {
       style={styles.background}
       resizeMode="cover"
     >
-      {/* Overlay for better text readability */}
       <View style={styles.overlay} />
       
       <KeyboardAvoidingView 

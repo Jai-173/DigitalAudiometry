@@ -1,5 +1,5 @@
-import React from "react";
-import { View, StyleSheet, Dimensions, ScrollView, TouchableOpacity } from "react-native";
+import React, { useRef } from "react";
+import { View, StyleSheet, Dimensions, ScrollView, TouchableOpacity, Alert, Platform } from "react-native";
 import Svg, { Line, Circle, Text as SvgText, Polyline, Rect } from "react-native-svg";
 import ScreenWrapper from "@/components/ScreenWrapper";
 import Typo from "@/components/Typo";
@@ -8,66 +8,82 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import Animated, { FadeInDown, FadeInUp } from "react-native-reanimated";
 import { scale, verticalScale } from "@/utils/styling";
 import Entypo from '@expo/vector-icons/Entypo';
-
+import { captureRef } from "react-native-view-shot";
+import * as Sharing from 'expo-sharing';
+import * as FileSystem from 'expo-file-system';
 
 const AnimatedTouchable = Animated.createAnimatedComponent(TouchableOpacity);
 
 const { width } = Dimensions.get("window");
 const CHART_WIDTH = width * 0.9;
-const CHART_HEIGHT = 340;
+const CHART_HEIGHT = 450;
+
+const xPadding = 70;
+const yPaddingTop = 30;
+const yPaddingBottom = 40;
 
 const FREQUENCIES = [125, 250, 500, 1000, 2000, 4000, 8000];
 const DB_LEVELS = [-10, 0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110];
 
+type ThresholdItem = { freq: number; dbLevel: number; ear?: string; type?: string };
+
 export default function ResultsScreen() {
   const router = useRouter();
-  const { results, ear } = useLocalSearchParams<{
-    results?: string;
-    ear?: string;
+
+  const { leftResults, rightResults } = useLocalSearchParams<{
+    leftResults?: string;
+    rightResults?: string;
   }>();
 
-  // Parse results with dbLevel (not volume)
-  let parsed: { freq: number; dbLevel: number }[] = [];
+  const screenShotRef = useRef<View>(null);
+
+  let parsedLeft: ThresholdItem[] = [];
+  let parsedRight: ThresholdItem[] = [];
+
   try {
-    parsed = results ? JSON.parse(results) : [];
+    parsedLeft = leftResults ? JSON.parse(leftResults) : [];
+    parsedRight = rightResults ? JSON.parse(rightResults) : [];
   } catch (err) {
     console.error("Error parsing results:", err);
   }
 
-  // Use dbLevel directly
-  const thresholds = parsed.map((item) => ({
+  const leftThresholds = parsedLeft.map((item) => ({
     freq: item.freq,
     db: Math.round(item.dbLevel),
+    ear: item.ear || 'left',
   }));
 
-  const leftEarData = ear === "left" ? thresholds : [];
-  const rightEarData = ear === "right" ? thresholds : [];
+  const rightThresholds = parsedRight.map((item) => ({
+    freq: item.freq,
+    db: Math.round(item.dbLevel),
+    ear: item.ear || 'right',
+  }));
 
-  const showLeft = leftEarData.length > 0;
-  const showRight = rightEarData.length > 0;
+  const showLeft = leftThresholds.length > 0;
+  const showRight = rightThresholds.length > 0;
 
-  const xPadding = 40;
-  const yPaddingTop = 15;
-  const yPaddingBottom = 30;
+  const allThresholds = [
+    ...leftThresholds.map(t => ({ ...t, ear: 'left' })),
+    ...rightThresholds.map(t => ({ ...t, ear: 'right' }))
+  ];
 
-  // X and Y scale functions
   const xScale = (freq: number) =>
     xPadding +
     (FREQUENCIES.indexOf(freq) / (FREQUENCIES.length - 1)) *
-      (CHART_WIDTH - 2 * xPadding);
+    (CHART_WIDTH - 2 * xPadding);
 
-  // Higher dB = lower on graph
   const yScale = (db: number) =>
     yPaddingTop +
     ((110 - db) / 110) * (CHART_HEIGHT - yPaddingTop - yPaddingBottom);
 
-  // Average dB threshold
+  const chartTopY = yScale(-10);
+  const chartBottomY = yScale(110);
+
   const avgThreshold =
-    thresholds.length > 0
-      ? Math.round(thresholds.reduce((sum, t) => sum + t.db, 0) / thresholds.length)
+    allThresholds.length > 0
+      ? Math.round(allThresholds.reduce((sum, t) => sum + t.db, 0) / allThresholds.length)
       : 0;
 
-  // Hearing level classification (based on dB HL)
   const getHearingLevel = (avg: number) => {
     if (avg <= 25) return { label: "Normal", color: colors.green };
     if (avg <= 40) return { label: "Mild Loss", color: colors.blue };
@@ -78,251 +94,338 @@ export default function ResultsScreen() {
 
   const hearingLevel = getHearingLevel(avgThreshold);
 
+  const headerText = showLeft && showRight
+    ? "Combined Audiogram Results"
+    : showLeft
+      ? "Left Ear Results"
+      : showRight
+        ? "Right Ear Results"
+        : "Audiogram Results";
+  // 2. Logic for sharing the screen content (graph + text results)
+  const captureAndShareScreen = async () => {
+    try {
+      const uri = await captureRef(screenShotRef, {
+        format: "png",
+        quality: 1.0,
+      });
+
+      if (!(await Sharing.isAvailableAsync())) {
+        Alert.alert("Sharing unavailable", "Sharing is not available on this device.");
+        return;
+      }
+
+      await Sharing.shareAsync(uri, {
+        mimeType: 'image/png',
+        dialogTitle: 'Share your Audiogram Results',
+      });
+    } catch (error) {
+      console.error("Error capturing or sharing screen:", error);
+      Alert.alert("Error", "Could not share results.");
+    }
+  };
+
+  // 3. Logic for downloading/saving the screen content
+  const captureAndDownloadScreen = async () => {
+    try {
+      const uri = await captureRef(screenShotRef, {
+        format: "png",
+        quality: 1.0,
+      });
+
+      if (Platform.OS === 'ios' || Platform.OS === 'android') {
+        // Use Expo Sharing to prompt the user to save to photos (iOS/Android)
+        await Sharing.shareAsync(uri, {
+          mimeType: 'image/png',
+          dialogTitle: 'Save Audiogram Results',
+          UTI: 'public.png' // iOS specific
+        });
+        Alert.alert("Success", "The image has been saved to your device's photos/files.");
+
+      } else {
+        // For web/other platforms, show success message
+        const filename = `Audiogram_Results_${Date.now()}.png`;
+        Alert.alert("Success", `Results saved as ${filename}.`);
+      }
+
+    } catch (error) {
+      console.error("Error capturing or downloading screen:", error);
+      Alert.alert("Error", "Could not download results.");
+    }
+  };
+
+
   return (
     <ScreenWrapper showPattern>
       <ScrollView
         contentContainerStyle={styles.container}
         showsVerticalScrollIndicator={false}
       >
-        <Animated.View
-          entering={FadeInUp.duration(600).springify()}
-          style={styles.headerSection}
-        >
-          <Typo style={styles.header}>
-            {ear ? `${ear === "left" ? "Left" : "Right"} Ear Results` : "Audiogram Results"}
-          </Typo>
-
-          <View style={[styles.statusCard, { borderLeftColor: hearingLevel.color }]}>
-            <Typo style={styles.statusLabel}>Hearing Status</Typo>
-            <Typo style={{ ...styles.statusValue, color: hearingLevel.color }}>
-              {hearingLevel.label}
+        <View ref={screenShotRef} collapsable={false} style={styles.captureTarget}>
+          <Animated.View
+            entering={FadeInUp.duration(600).springify()}
+            style={styles.headerSection}
+          >
+            <Typo style={styles.header}>
+              {headerText}
             </Typo>
-            <Typo style={styles.statusSubtext}>
-              Average: {avgThreshold} dB HL
-            </Typo>
-          </View>
-        </Animated.View>
 
-        <Animated.View
-          entering={FadeInDown.duration(600).delay(100).springify()}
-          style={styles.chartWrapper}
-        >
-          <View style={styles.chartHeader}>
-            <Typo style={styles.chartTitle}>Audiogram</Typo>
-            <View style={styles.legend}>
-              {showLeft && (
-                <View style={styles.legendItem}>
-                  <View style={[styles.legendMarker, styles.legendX]} />
-                  <Typo style={styles.legendText}>Left Ear (X)</Typo>
-                </View>
-              )}
-              {showRight && (
-                <View style={styles.legendItem}>
-                  <View style={[styles.legendMarker, styles.legendCircle]} />
-                  <Typo style={styles.legendText}>Right Ear (O)</Typo>
-                </View>
-              )}
+            <View style={[styles.statusCard, { borderLeftColor: hearingLevel.color }]}>
+              <Typo style={styles.statusLabel}>Overall Hearing Status</Typo>
+              <Typo style={{ ...styles.statusValue, color: hearingLevel.color }}>
+                {hearingLevel.label}
+              </Typo>
+              <Typo style={styles.statusSubtext}>
+                Average: {avgThreshold} dB HL (Combined)
+              </Typo>
             </View>
-          </View>
+          </Animated.View>
 
-          <Svg width={CHART_WIDTH} height={CHART_HEIGHT + 40}>
-            {/* Background */}
-            <Rect
-              x={xPadding}
-              y={yPaddingTop}
-              width={CHART_WIDTH - 2 * xPadding}
-              height={CHART_HEIGHT - yPaddingTop - yPaddingBottom}
-              fill={colors.neutral100}
-            />
+          <Animated.View
+            entering={FadeInDown.duration(600).delay(100).springify()}
+            style={styles.chartWrapper}
+          >
+            <View style={styles.chartHeader}>
+              <Typo style={styles.chartTitle}>Audiogram</Typo>
+              <View style={styles.legend}>
+                {showLeft && (
+                  <View style={styles.legendItem}>
+                    {/* Left Ear Legend is Red X */}
+                    <View style={[styles.legendMarker, styles.legendXRed]} />
+                    <Typo style={styles.legendText}>Left Ear (X)</Typo>
+                  </View>
+                )}
+                {showRight && (
+                  <View style={styles.legendItem}>
+                    {/* Right Ear Legend is Blue O */}
+                    <View style={[styles.legendMarker, styles.legendCircleBlue]} />
+                    <Typo style={styles.legendText}>Right Ear (O)</Typo>
+                  </View>
+                )}
+              </View>
+            </View>
 
-            {/* Horizontal grid lines */}
-            {DB_LEVELS.map((db) => (
-              <Line
-                key={`grid-${db}`}
-                x1={xPadding}
-                y1={yScale(db)}
-                x2={CHART_WIDTH - xPadding}
-                y2={yScale(db)}
-                stroke={colors.neutral400}
-                strokeWidth="1"
-                strokeDasharray="4,4"
+            <Svg width={CHART_WIDTH} height={CHART_HEIGHT + 40}>
+              {/* Background */}
+              <Rect
+                x={xPadding}
+                y={chartTopY}
+                width={CHART_WIDTH - 2 * xPadding}
+                height={chartBottomY - chartTopY}
+                fill={colors.neutral100}
               />
-            ))}
 
-            {/* Vertical grid lines */}
-            {FREQUENCIES.map((f) => (
-              <Line
-                key={`vgrid-${f}`}
-                x1={xScale(f)}
-                y1={yPaddingTop}
-                x2={xScale(f)}
-                y2={CHART_HEIGHT - yPaddingBottom}
-                stroke={colors.neutral400}
-                strokeWidth="1"
-                strokeDasharray="4,4"
-              />
-            ))}
+              {/* Horizontal grid lines */}
+              {DB_LEVELS.map((db) => (
+                <Line
+                  key={`grid-${db}`}
+                  x1={xPadding}
+                  y1={yScale(db)}
+                  x2={CHART_WIDTH - xPadding}
+                  y2={yScale(db)}
+                  stroke={colors.neutral400}
+                  strokeWidth="1"
+                  strokeDasharray="4,4"
+                />
+              ))}
 
-            {/* Y-axis labels */}
-            {DB_LEVELS.map((db) => (
+              {/* Vertical grid lines */}
+              {FREQUENCIES.map((f) => (
+                <Line
+                  key={`vgrid-${f}`}
+                  x1={xScale(f)}
+                  y1={chartTopY}
+                  x2={xScale(f)}
+                  y2={chartBottomY}
+                  stroke={colors.neutral400}
+                  strokeWidth="1"
+                  strokeDasharray="4,4"
+                />
+              ))}
+
+              {/* Y-axis labels */}
+              {DB_LEVELS.map((db) => (
+                <SvgText
+                  key={`ylabel-${db}`}
+                  x={xPadding - 16} // Adjusted for better centering
+                  y={yScale(db) + 4}
+                  fontSize="12"
+                  fill={colors.text}
+                  textAnchor="end"
+                  fontWeight="600"
+                >
+                  {db}
+                </SvgText>
+              ))}
+
+              {/* X-axis labels */}
+              {FREQUENCIES.map((f) => (
+                <SvgText
+                  key={`xlabel-${f}`}
+                  x={xScale(f)}
+                  y={CHART_HEIGHT + 20}
+                  fontSize="12"
+                  fill={colors.text}
+                  textAnchor="middle"
+                  fontWeight="600"
+                >
+                  {f}
+                </SvgText>
+              ))}
+
+              {/* Axis titles (Adjusted X for better centering) */}
               <SvgText
-                key={`ylabel-${db}`}
-                x={xPadding - 12}
-                y={yScale(db) + 4}
+                x={xPadding - 45} // Adjusted from 30/40
+                y={CHART_HEIGHT / 2}
                 fontSize="12"
-                fill={colors.text}
-                textAnchor="end"
+                fill={colors.neutral600}
+                textAnchor="middle"
+                transform={`rotate(-90, ${xPadding - 45}, ${CHART_HEIGHT / 2})`}
                 fontWeight="600"
               >
-                {db}
+                Hearing Level (dB HL)
               </SvgText>
-            ))}
 
-            {/* X-axis labels */}
-            {FREQUENCIES.map((f) => (
               <SvgText
-                key={`xlabel-${f}`}
-                x={xScale(f)}
-                y={CHART_HEIGHT + 20}
+                x={CHART_WIDTH / 2}
+                y={CHART_HEIGHT + 35}
                 fontSize="12"
-                fill={colors.text}
+                fill={colors.neutral600}
                 textAnchor="middle"
                 fontWeight="600"
               >
-                {f}
+                Frequency (Hz)
               </SvgText>
-            ))}
 
-            {/* Axis titles */}
-            <SvgText
-              x={xPadding - 30}
-              y={CHART_HEIGHT / 2}
-              fontSize="12"
-              fill={colors.neutral600}
-              textAnchor="middle"
-              transform={`rotate(-90, ${xPadding - 30}, ${CHART_HEIGHT / 2})`}
-              fontWeight="600"
-            >
-              Hearing Level (dB HL)
-            </SvgText>
-
-            <SvgText
-              x={CHART_WIDTH / 2}
-              y={CHART_HEIGHT + 35}
-              fontSize="12"
-              fill={colors.neutral600}
-              textAnchor="middle"
-              fontWeight="600"
-            >
-              Frequency (Hz)
-            </SvgText>
-
-            {/* Left Ear */}
-            {showLeft && (
-              <>
-                <Polyline
-                  points={leftEarData.map((p) => `${xScale(p.freq)},${yScale(p.db)}`).join(" ")}
-                  fill="none"
-                  stroke={colors.red}
-                  strokeWidth="3"
-                />
-                {leftEarData.map((p, i) => {
-                  const cx = xScale(p.freq);
-                  const cy = yScale(p.db);
-                  const s = 7;
-                  return (
-                    <React.Fragment key={`left-${i}`}>
-                      <Line
-                        x1={cx - s}
-                        y1={cy - s}
-                        x2={cx + s}
-                        y2={cy + s}
-                        stroke={colors.red}
-                        strokeWidth={3}
-                        strokeLinecap="round"
-                      />
-                      <Line
-                        x1={cx - s}
-                        y1={cy + s}
-                        x2={cx + s}
-                        y2={cy - s}
-                        stroke={colors.red}
-                        strokeWidth={3}
-                        strokeLinecap="round"
-                      />
-                    </React.Fragment>
-                  );
-                })}
-              </>
-            )}
-
-            {/* Right Ear */}
-            {showRight && (
-              <>
-                <Polyline
-                  points={rightEarData.map((p) => `${xScale(p.freq)},${yScale(p.db)}`).join(" ")}
-                  fill="none"
-                  stroke={colors.red}
-                  strokeWidth="3"
-                />
-                {rightEarData.map((p, i) => (
-                  <Circle
-                    key={`right-${i}`}
-                    cx={xScale(p.freq)}
-                    cy={yScale(p.db)}
-                    r="5"
+              {/* Left Ear (Red X, Red Line) */}
+              {showLeft && (
+                <>
+                  <Polyline
+                    points={leftThresholds.map((p) => `${xScale(p.freq)},${yScale(p.db)}`).join(" ")}
+                    fill="none"
                     stroke={colors.red}
                     strokeWidth="3"
-                    fill={colors.neutral100}
                   />
-                ))}
-              </>
-            )}
-          </Svg>
-        </Animated.View>
+                  {leftThresholds.map((p, i) => {
+                    const cx = xScale(p.freq);
+                    const cy = yScale(p.db);
+                    const s = 7;
+                    return (
+                      <React.Fragment key={`left-${i}`}>
+                        <Line
+                          x1={cx - s}
+                          y1={cy - s}
+                          x2={cx + s}
+                          y2={cy + s}
+                          stroke={colors.red}
+                          strokeWidth={3}
+                          strokeLinecap="round"
+                        />
+                        <Line
+                          x1={cx - s}
+                          y1={cy + s}
+                          x2={cx + s}
+                          y2={cy - s}
+                          stroke={colors.red}
+                          strokeWidth={3}
+                          strokeLinecap="round"
+                        />
+                      </React.Fragment>
+                    );
+                  })}
+                </>
+              )}
 
-        {/* Threshold details */}
-        <Animated.View
-          entering={FadeInUp.duration(600).delay(200).springify()}
-          style={styles.detailsCard}
-        >
-          <Typo style={styles.detailsTitle}>Threshold Details</Typo>
-          {thresholds.map((t, idx) => (
-            <View key={idx} style={styles.detailRow}>
-              <Typo style={styles.detailFreq}>{t.freq} Hz</Typo>
-              <View style={styles.detailBar}>
-                <View
-                  style={[
-                    styles.detailBarFill,
-                    {
-                      width: `${(t.db / 110) * 100}%`,
-                      backgroundColor:
-                        t.db <= 25
-                          ? colors.primaryAccent
-                          : t.db <= 40
-                          ? colors.yellow
-                          : colors.red,
-                    },
-                  ]}
-                />
+              {/* Right Ear (Blue O, Blue Line) */}
+              {showRight && (
+                <>
+                  <Polyline
+                    points={rightThresholds.map((p) => `${xScale(p.freq)},${yScale(p.db)}`).join(" ")}
+                    fill="none"
+                    stroke={colors.red} // Changed to standard audiogram color (Blue)
+                    strokeWidth="3"
+                  />
+                  {rightThresholds.map((p, i) => (
+                    <Circle
+                      key={`right-${i}`}
+                      cx={xScale(p.freq)}
+                      cy={yScale(p.db)}
+                      r="5"
+                      stroke={colors.red} // Changed to Blue
+                      strokeWidth="3"
+                      fill={colors.neutral100}
+                    />
+                  ))}
+                </>
+              )}
+            </Svg>
+          </Animated.View>
+
+          {/* Threshold details (simplified to show all combined data) */}
+          <Animated.View
+            entering={FadeInUp.duration(600).delay(200).springify()}
+            style={styles.detailsCard}
+          >
+            <Typo style={styles.detailsTitle}>Threshold Details</Typo>
+            {allThresholds.map((t, idx) => (
+              <View key={idx} style={styles.detailRow}>
+                <Typo style={styles.detailFreq}>
+                  {t.freq} Hz ({t.ear === 'left' ? 'L' : 'R'})
+                </Typo>
+                <View style={styles.detailBar}>
+                  <View
+                    style={[
+                      styles.detailBarFill,
+                      {
+                        width: `${(t.db / 110) * 100}%`,
+                        backgroundColor:
+                          t.db <= 25
+                            ? colors.primaryAccent
+                            : t.db <= 40
+                              ? colors.yellow
+                              : colors.red,
+                      },
+                    ]}
+                  />
+                </View>
+                <Typo style={styles.detailDb}>{t.db} dB</Typo>
               </View>
-              <Typo style={styles.detailDb}>{t.db} dB</Typo>
-            </View>
-          ))}
-        </Animated.View>
+            ))}
+          </Animated.View>
+        </View>
+        {/* End of content to capture */}
 
-        {/* Buttons */}
+        {/* 5. Download Button */}
         <AnimatedTouchable
           entering={FadeInUp.duration(600).delay(300).springify()}
           style={styles.actionButton}
+          onPress={captureAndDownloadScreen}
+          activeOpacity={0.85}
+        >
+          <Typo style={styles.actionButtonText}><Entypo name="download" size={20} color={colors.white} /> Download Results</Typo>
+        </AnimatedTouchable>
+
+        {/* 6. Share Button */}
+        <AnimatedTouchable
+          entering={FadeInUp.duration(600).delay(350).springify()}
+          style={styles.actionButton}
+          onPress={captureAndShareScreen}
+          activeOpacity={0.85}
+        >
+          <Typo style={styles.actionButtonText}><Entypo name="share" size={20} color={colors.white} /> Share Results</Typo>
+        </AnimatedTouchable>
+
+        {/* Other navigation buttons */}
+        <AnimatedTouchable
+          entering={FadeInUp.duration(600).delay(400).springify()}
+          style={styles.secondaryButton}
           onPress={() => router.push("/(main)/test")}
           activeOpacity={0.85}
         >
-          <Typo style={styles.actionButtonText}>Test Other Ear</Typo>
+          <Typo style={styles.secondaryButtonText}>Test Other Ear</Typo>
         </AnimatedTouchable>
 
         <AnimatedTouchable
-          entering={FadeInUp.duration(600).delay(400).springify()}
+          entering={FadeInUp.duration(600).delay(450).springify()}
           style={styles.secondaryButton}
           onPress={() => router.push("/(main)/frontpage")}
           activeOpacity={0.85}
@@ -341,6 +444,29 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacingX._20,
     paddingBottom: spacingY._50,
   },
+  legendXRed: {
+    position: "relative",
+    borderWidth: 2,
+    borderColor: colors.red,
+    // Optional: Add styling to mimic an 'X' shape in the legend
+    transform: [{ rotate: '45deg' }],
+    
+  },
+  legendCircleBlue: {
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: colors.red, // Changed to Blue
+    backgroundColor: colors.neutral100,
+  },
+  // 7. Added style for the View to be captured
+  captureTarget: {
+    width: "100%",
+    // backgroundColor: colors.neutral900, // Ensure background is set for the capture
+    paddingHorizontal: spacingX._20, // Adjust padding if needed
+    alignItems: 'center',
+  },
+  // ... (rest of your styles remain the same)
+
   headerSection: {
     alignItems: "center",
     width: "100%",
@@ -383,6 +509,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.white,
     borderRadius: radius._15,
     padding: spacingY._15,
+    paddingLeft: 0,
     width: "100%",
     elevation: 3,
     shadowColor: colors.neutral900,
@@ -393,11 +520,14 @@ const styles = StyleSheet.create({
   },
   chartHeader: {
     marginBottom: spacingY._15,
+    paddingLeft: spacingX._10,
+
   },
   chartTitle: {
     fontSize: scale(18),
     fontWeight: "700",
     color: colors.primaryDark,
+    paddingLeft: spacingX._15,
     marginBottom: spacingY._10,
   },
   legend: {
@@ -499,6 +629,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderWidth: 1.5,
     borderColor: colors.primary + "30",
+    marginBottom: spacingY._12, // Added spacing for multiple buttons
   },
   secondaryButtonText: {
     color: colors.text,

@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, TouchableOpacity, StyleSheet } from "react-native";
+import { View, TouchableOpacity, StyleSheet, Alert } from "react-native";
 import ScreenWrapper from "@/components/ScreenWrapper";
 import { colors, spacingX, spacingY, radius } from "@/constants/theme";
 import { scale, verticalScale } from "@/utils/styling";
@@ -11,20 +11,17 @@ import { Entypo } from '@expo/vector-icons';
 
 const AnimatedTouchable = Animated.createAnimatedComponent(TouchableOpacity);
 
-// Standard reference values for calibration
 const CALIBRATION = {
-  REFERENCE_FREQ: 1000,  // 1 kHz reference tone
-  REFERENCE_DB: 40,      // Reference level in dB HL
-  MAX_SAFE_DB: 85,       // Safety limit
+  REFERENCE_FREQ: 1000,  // 1 kHz reference tone
+  INSTRUCTION_DB_HL: 40,     // Target loudness level for user adjustment
+  APP_INITIAL_VOLUME: 0.4, // Fixed digital volume (40% max) to ensure sound is present but not loud
 };
 
 export default function CalibrateScreen() {
   const router = useRouter();
   const [isPlaying, setIsPlaying] = useState(false);
-  const [calibratedVolume, setCalibratedVolume] = useState(0.5); // Initial mid-level volume
   const pulseAnim = useSharedValue(1);
 
-  // Use 1kHz tone for calibration as it's the reference frequency
   const player = useAudioPlayer(require("../../assets/sounds/left_1000hz.wav"));
   const status = useAudioPlayerStatus(player);
 
@@ -38,8 +35,8 @@ export default function CalibrateScreen() {
     if (isPlaying) {
       pulseAnim.value = withRepeat(
         withTiming(1.1, { duration: 800 }),
-        -1,
-        true
+        -1, // infinite repeat
+        true // reverse animation
       );
     } else {
       pulseAnim.value = withTiming(1);
@@ -50,44 +47,37 @@ export default function CalibrateScreen() {
     transform: [{ scale: pulseAnim.value }],
   }));
 
-  // Convert dB HL to digital amplitude for 1kHz reference tone
-  function getReferenceVolume(dbHL: number): number {
-    // Reference tone conversion (1kHz specific)
-    const dbSPL = dbHL + 20; // Convert dB HL to dB SPL
-    const amplitude = Math.pow(10, (dbSPL - 110) / 20);
-    return Math.min(1, Math.max(0, amplitude));
+  function getReferenceVolume(): number {
+    return CALIBRATION.APP_INITIAL_VOLUME;
   }
 
   async function handlePlay() {
     try {
-      if (!player) return;
+      if (!player) {
+        Alert.alert("Error", "Audio player not ready.");
+        return;
+      }
+      
       if (status?.playing) {
         await player.pause();
-        setIsPlaying(false);
       } else {
-        // Set reference volume for calibration
-        player.volume = getReferenceVolume(CALIBRATION.REFERENCE_DB);
+        player.volume = getReferenceVolume(); 
         await player.seekTo(0);
         await player.play();
-        setIsPlaying(true);
-
-        // Auto-stop after 2 seconds for consistent calibration
         setTimeout(async () => {
-          if (player) {
+          if (player && status?.playing) {
             try {
               await player.pause();
-              setIsPlaying(false);
             } catch (_) {}
           }
-        }, 2000);
+        }, 5000); 
       }
     } catch (e) {
       console.error("Audio error:", e);
-      setIsPlaying(false);
+      Alert.alert("Error", "Could not play the tone.");
     }
   }
 
-  // Cleanup resources
   React.useEffect(() => {
     return () => {
       if (player) {
@@ -105,25 +95,32 @@ export default function CalibrateScreen() {
           entering={FadeInUp.duration(600).springify()}
           style={styles.headerContainer}
         >
-          <Typo style={styles.header}>Calibration</Typo>
+          <Typo style={styles.header}>Device Calibration</Typo>
+          
           <View style={styles.instructionCard}>
-            <Typo style={styles.instructionTitle}>Setup Instructions:</Typo>
+            <Typo style={styles.instructionTitle}>Get Ready to Test:</Typo>
             <View style={styles.instructionItem}>
               <Typo style={styles.bullet}>1.</Typo>
               <Typo style={styles.instructionText}>
-                Put on your headphones
+                Put on your headphones.
               </Typo>
             </View>
             <View style={styles.instructionItem}>
               <Typo style={styles.bullet}>2.</Typo>
               <Typo style={styles.instructionText}>
-                Play the 1kHz reference tone below
+                Tap **"Play 1 kHz Tone"** below to start the sound.
               </Typo>
             </View>
             <View style={styles.instructionItem}>
               <Typo style={styles.bullet}>3.</Typo>
               <Typo style={styles.instructionText}>
-                Adjust system volume until tone is at a comfortable 40 dB level
+                Use your **phone's physical volume buttons** to adjust the loudness.
+              </Typo>
+            </View>
+            <View style={styles.instructionItem}>
+              <Typo style={styles.bullet}>4.</Typo>
+              <Typo style={styles.instructionText}>
+                Set the tone to a **soft, comfortable listening level** (roughly **{CALIBRATION.INSTRUCTION_DB_HL} dB**).
               </Typo>
             </View>
           </View>
@@ -151,10 +148,11 @@ export default function CalibrateScreen() {
               entering={FadeInDown.duration(400)}
               style={styles.playingIndicator}
             >
+              {/* Added a simple visual indicator to show sound is playing */}
               <View style={styles.waveBar} />
               <View style={[styles.waveBar, styles.waveBarDelay]} />
               <View style={[styles.waveBar, styles.waveBarDelay2]} />
-              <Typo style={styles.playingText}>Playing...</Typo>
+              <Typo style={styles.playingText}>Adjusting System Volume...</Typo>
             </Animated.View>
           )}
         </Animated.View>
@@ -165,7 +163,7 @@ export default function CalibrateScreen() {
           onPress={() => router.push("/(main)/test")}
           activeOpacity={0.85}
         >
-          <Typo style={styles.continueText}>Continue to Test</Typo>
+          <Typo style={styles.continueText}>Calibration Complete - Continue to Test</Typo>
         </AnimatedTouchable>
 
         <Animated.View 
@@ -173,7 +171,7 @@ export default function CalibrateScreen() {
           style={styles.tipCard}
         >
           <Typo style={styles.tipText}>
-            💡 Tip: The reference tone should be at a comfortable listening level (40 dB). This will be used to calibrate all test frequencies.
+            ⚠️ This step sets your device's volume as the **reference point** for the entire hearing test. Do not change your phone's volume after this!
           </Typo>
         </Animated.View>
       </View>

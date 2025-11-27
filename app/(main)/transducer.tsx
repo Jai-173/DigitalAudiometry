@@ -1,4 +1,3 @@
-// app/(main)/select-transducer.tsx
 import React from "react";
 import { View, TouchableOpacity, StyleSheet } from "react-native";
 import ScreenWrapper from "@/components/ScreenWrapper";
@@ -14,7 +13,6 @@ export default function SelectTransducer() {
   const router = useRouter();
 
   const goToCalibrate = (type: "air" | "bone") => {
-    // push to calibrate and pass the selected transducer as a query param
     router.push(`/(main)/calibrate?transducer=${type}`);
   };
 

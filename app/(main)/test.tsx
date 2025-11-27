@@ -12,10 +12,14 @@ const AnimatedTouchable = Animated.createAnimatedComponent(TouchableOpacity);
 export default function TestScreen() {
   const router = useRouter();
 
+  const startCombinedTest = () => {
+    router.push(({ pathname: "/(main)/testflow", params: { ear: "left", type: "air" } }) as any);
+  };
+
   return (
     <ScreenWrapper showPattern>
       <View style={styles.container}>
-        <Animated.View 
+        <Animated.View
           entering={FadeInUp.duration(600).springify()}
           style={styles.headerContainer}
         >
@@ -26,46 +30,19 @@ export default function TestScreen() {
         </Animated.View>
 
         <View style={styles.contentContainer}>
-          {/* <AnimatedTouchable
-            entering={FadeInDown.duration(600).delay(100).springify()}
-            style={styles.btnSecondary}
-            onPress={() => router.push(("/(main)/calibrate") as any)}
-            activeOpacity={0.8}
-          >
-            <Typo style={styles.btnTextSecondary}>Calibrate Headphones</Typo>
-          </AnimatedTouchable>
-
-          <Animated.View 
-            entering={FadeInDown.duration(600).delay(200).springify()}
-            style={styles.dividerContainer}
-          >
-            <View style={styles.divider} />
-            <Typo style={styles.dividerText}>or start directly</Typo>
-            <View style={styles.divider} />
-          </Animated.View> */}
-
           <View style={styles.earButtons}>
             <AnimatedTouchable
               entering={FadeInDown.duration(600).delay(300).springify()}
               style={styles.btnPrimary}
-              onPress={() => router.push(({ pathname: "/(main)/testflow", params: { ear: "left" } }) as any)}
+              onPress={startCombinedTest}
               activeOpacity={0.85}
             >
-              <Typo style={styles.btnTextPrimary}>Start Test (Left Ear)</Typo>
-            </AnimatedTouchable>
-
-            <AnimatedTouchable
-              entering={FadeInDown.duration(600).delay(400).springify()}
-              style={styles.btnPrimary}
-              onPress={() => router.push(({ pathname: "/(main)/testflow", params: { ear: "right" } }) as any)}
-              activeOpacity={0.85}
-            >
-              <Typo style={styles.btnTextPrimary}>Start Test (Right Ear)</Typo>
+              <Typo style={styles.btnTextPrimary}>Start Combined Air Test</Typo>
             </AnimatedTouchable>
           </View>
         </View>
 
-        <Animated.View 
+        <Animated.View
           entering={FadeInUp.duration(600).delay(500).springify()}
           style={styles.infoCard}
         >

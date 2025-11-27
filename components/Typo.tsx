@@ -27,5 +27,3 @@ const Typo = ({
 }
 
 export default Typo
-
-const styles = StyleSheet.create({})

@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, TouchableOpacity, StyleSheet } from "react-native";
+import { View, TouchableOpacity, StyleSheet, Alert } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import ScreenWrapper from "@/components/ScreenWrapper";
 import { colors, spacingX, spacingY, radius } from "@/constants/theme";
@@ -13,21 +13,36 @@ const AnimatedTouchable = Animated.createAnimatedComponent(TouchableOpacity);
 
 const FREQUENCIES = [250, 500, 1000, 2000, 4000, 8000];
 
-// Calibration reference values for each frequency (in dB)
-const CALIBRATION_REFS: Record<number, number> = {
-  250: -20,   // Reference offset for 250 Hz
-  500: -15,   // Reference offset for 500 Hz
-  1000: 0,    // Reference frequency (no offset)
-  2000: 5,    // Reference offset for 2 kHz
-  4000: 10,   // Reference offset for 4 kHz
-  8000: 15,   // Reference offset for 8 kHz
+const HEADPHONE_REF_DBFS = 90;
+
+const CALIBRATION_REFS_AC: Record<number, number> = {
+  250: 15,
+  500: 5,
+  1000: 0,
+  2000: -5,
+  4000: -10,
+  8000: -5,
 };
 
-export default function TestFlowScreen() {
+const CALIBRATION_REFS_BC: Record<number, number> = {
+  250: 25,
+  500: 15,
+  1000: 10,
+  2000: 0,
+  4000: -5,
+  8000: 5,
+};
+
+const MAX_DB_HL = 110;
+const MIN_DB_HL = -10;
+
+const TONE_DURATION_MS = 1000;export default function TestFlowScreen() {
   const router = useRouter();
-  const { ear } = useLocalSearchParams<{ ear: string }>();
+  const { ear, type, leftResults } = useLocalSearchParams<{ ear: string, type: string, leftResults?: string }>();
+  const isBoneConduction = type === 'bone';
+
   const [index, setIndex] = useState(0);
-  const [dbLevel, setDbLevel] = useState(30); // start at 30 dB HL (typical starting level for audiometry)
+  const [dbLevel, setDbLevel] = useState(30);
   const [thresholds, setThresholds] = useState<any[]>([]);
 
   const freq = FREQUENCIES[index];
@@ -50,96 +65,82 @@ export default function TestFlowScreen() {
   const key = `${freq}_${ear?.toLowerCase()}`;
   const player = useAudioPlayer(soundMap[key]);
 
-  // Get calibration offset for current frequency
-  function getCalibrationOffset(frequency: number): number {
-    return CALIBRATION_REFS[frequency] || 0;
+  function getCalibrationOffset(frequency: number, isBC: boolean): number {
+    const refs = isBC ? CALIBRATION_REFS_BC : CALIBRATION_REFS_AC;
+    return refs[frequency] || 0;
   }
 
-  // Convert dB HL to digital amplitude scaling with calibration
-  function dbToVolume(dbHL: number, frequency: number): number {
-    // Apply frequency-specific calibration
-    const calibratedDb = dbHL + getCalibrationOffset(frequency);
-    
-    // Convert dB HL to dB SPL (rough approximation, needs hardware calibration)
-    const dbSPL = calibratedDb + 20; // Add reference offset
-    
-    // Convert to amplitude using proper logarithmic scaling
-    // Maximum safe level is 110 dB SPL
-    const maxDbSPL = 110;
-    const amplitude = Math.pow(10, (dbSPL - maxDbSPL) / 20);
-    
-    // Clamp between 0 and 1 for valid volume
+  function dbToVolume(dbHL: number, frequency: number, isBC: boolean): number {
+    const frequencyOffset = getCalibrationOffset(frequency, isBC);
+    const targetDbFS = dbHL + frequencyOffset - HEADPHONE_REF_DBFS;
+    const amplitude = Math.pow(10, targetDbFS / 20);
     return Math.min(1, Math.max(0, amplitude));
-  }
-  
-  async function handlePlay() {
+  }  async function handlePlay() {
     try {
       if (!player) return;
-      
-      // Stop any existing playback
+
       try {
         await player.pause();
-      } catch (_) {}
+      } catch (_) { }
 
-      // Calculate volume with calibration for current frequency
-      const volume = dbToVolume(dbLevel, freq);
-      
-      // Set volume and play from start
+      const volume = dbToVolume(dbLevel, freq, isBoneConduction);
       player.volume = volume;
       await player.seekTo(0);
-      await player.play();      // Reset after playback finishes
+      await player.play();
+
       setTimeout(async () => {
         try {
           await player.pause();
-        } catch (_) {}
-      }, 2000); // Assuming tone duration is ~1s
+        } catch (e) { }
+      }, TONE_DURATION_MS);
     } catch (e) {
       console.error("Playback error:", e);
+      Alert.alert("Audio Error", "Could not play the tone.");
     }
   }
 
-  // Cleanup audio resources when frequency changes or component unmounts
   React.useEffect(() => {
     return () => {
       if (player) {
         try {
           player.pause();
-        } catch (_) {}
+        } catch (_) { }
       }
     };
   }, [player, freq]);
 
   function handleDbUp() {
-    setDbLevel((prev) => {
-      // Step size of 5 dB as per standard audiometry practice
-      const newLevel = prev + 5;
-      // Maximum safe level is 90 dB HL (which translates to ~110 dB SPL with calibration)
-      return Math.min(newLevel, 90);
-    });
+    setDbLevel((prev) => Math.min(prev + 5, MAX_DB_HL));
   }
 
   function handleDbDown() {
-    setDbLevel((prev) => {
-      // Step size of 5 dB as per standard audiometry practice
-      const newLevel = prev - 5;
-      // Minimum of -10 dB HL for fine threshold detection
-      return Math.max(newLevel, -10);
-    });
+    setDbLevel((prev) => Math.max(prev - 5, MIN_DB_HL));
   }
 
   function handleMarkThreshold() {
-    const newThreshold = { freq, dbLevel };
-    setThresholds((prev) => [...prev, newThreshold]);
+    const newThreshold = { freq, dbLevel, ear, type: isBoneConduction ? 'BC' : 'AC' };
+    const currentEarResults = JSON.stringify([...thresholds, newThreshold]);
 
     if (index < FREQUENCIES.length - 1) {
       setIndex(index + 1);
-      setDbLevel(40); // reset mid-level for next frequency
+      setDbLevel(30);
+      setThresholds((prev) => [...prev, newThreshold]);
+    } else if (ear === 'left' && !leftResults) {
+      (router.replace as any)({
+        pathname: "/(main)/testflow",
+        params: {
+          ear: "right",
+          type,
+          leftResults: currentEarResults,
+        },
+      });
     } else {
-      (router.push as any)({
+
+      (router.replace as any)({
         pathname: "/(main)/results",
         params: {
-          ear,
-          results: JSON.stringify([...thresholds, newThreshold]),
+          leftResults: leftResults || (ear === 'left' ? currentEarResults : '[]'),
+          rightResults: ear === 'right' ? currentEarResults : '[]',
         },
       });
     }
@@ -148,9 +149,10 @@ export default function TestFlowScreen() {
   function handleBack() {
     if (index > 0) {
       setThresholds((prev) => {
-        const lastThreshold = prev[prev.length - 1];
-        setDbLevel(lastThreshold?.dbLevel || 40);
-        return prev.slice(0, -1);
+        const prevThresholds = prev.slice(0, -1);
+        const lastThreshold = prevThresholds[prevThresholds.length - 1];
+        setDbLevel(lastThreshold?.dbLevel || 30);
+        return prevThresholds;
       });
       setIndex(index - 1);
     }
@@ -161,10 +163,9 @@ export default function TestFlowScreen() {
   return (
     <ScreenWrapper showPattern>
       <View style={styles.container}>
-        {/* Header */}
         <Animated.View entering={FadeInUp.duration(600).springify()} style={styles.headerContainer}>
           <Typo style={styles.header}>
-            {ear === "left" ? "Left" : "Right"} Ear Test
+            {ear === "left" ? "Left" : "Right"} Ear {isBoneConduction ? "(BC)" : "(AC)"} Test
           </Typo>
 
           <View style={styles.progressContainer}>
@@ -185,7 +186,6 @@ export default function TestFlowScreen() {
           </View>
         </Animated.View>
 
-        {/* Controls */}
         <Animated.View
           key={`freq-${freq}`}
           entering={FadeInDown.duration(500).springify()}
@@ -204,6 +204,7 @@ export default function TestFlowScreen() {
                 style={styles.volumeBtn}
                 onPress={handleDbDown}
                 activeOpacity={0.7}
+                disabled={dbLevel <= MIN_DB_HL}
               >
                 <Typo style={styles.volumeText}>-</Typo>
               </TouchableOpacity>
@@ -217,18 +218,26 @@ export default function TestFlowScreen() {
                 style={styles.volumeBtn}
                 onPress={handleDbUp}
                 activeOpacity={0.7}
+                disabled={dbLevel >= MAX_DB_HL}
               >
                 <Typo style={styles.volumeText}>+</Typo>
               </TouchableOpacity>
             </View>
 
             <View style={styles.volumeBar}>
-              <View style={[styles.volumeBarFill, { width: `${(dbLevel / 110) * 100}%` }]} />
+              <View
+                style={[
+                  styles.volumeBarFill,
+                  { width: `${((dbLevel - MIN_DB_HL) / (MAX_DB_HL - MIN_DB_HL)) * 100}%` }
+                ]}
+              />
             </View>
+            <Typo style={styles.progressText}>
+              Range: {MIN_DB_HL} dB HL to {MAX_DB_HL} dB HL
+            </Typo>
           </View>
         </Animated.View>
 
-        {/* Bottom buttons */}
         <View style={styles.buttonRow}>
           <AnimatedTouchable
             entering={FadeInUp.duration(600).delay(100).springify()}
@@ -264,7 +273,7 @@ export default function TestFlowScreen() {
           >
             <View style={styles.nextContent}>
               <Typo style={styles.markText}>
-                {index < FREQUENCIES.length - 1 ? "Next" : "Finish"}
+                {index < FREQUENCIES.length - 1 ? "Mark & Next" : "Finish Test"}
               </Typo>
               <Entypo
                 name="chevron-right"
@@ -275,13 +284,12 @@ export default function TestFlowScreen() {
           </AnimatedTouchable>
         </View>
 
-        {/* Instructions */}
         <Animated.View
           entering={FadeInUp.duration(600).delay(200).springify()}
           style={styles.instructionCard}
         >
           <Typo style={styles.instructionText}>
-            💡 Adjust intensity to the softest level you can clearly hear
+            💡 **{isBoneConduction ? "Bone Conduction" : "Air Conduction"} Test** - Adjust intensity to the softest level you can clearly hear.
           </Typo>
         </Animated.View>
       </View>
@@ -289,7 +297,6 @@ export default function TestFlowScreen() {
   );
 }
 
-// --- Styles (unchanged) ---
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -336,7 +343,7 @@ const styles = StyleSheet.create({
   nextContent: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacingX._7,
+    gap: spacingX._3,
     width: "100%",
     justifyContent: "flex-end",
   },
@@ -471,6 +478,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.neutral300,
     borderRadius: 4,
     overflow: "hidden",
+    marginBottom: spacingY._7,
   },
   volumeBarFill: {
     height: "100%",
