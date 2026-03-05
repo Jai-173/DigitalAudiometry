@@ -108,19 +108,19 @@ export default function CalibrateScreen() {
             <View style={styles.instructionItem}>
               <Typo style={styles.bullet}>2.</Typo>
               <Typo style={styles.instructionText}>
-                Tap **"Play 1 kHz Tone"** below to start the sound.
+                Tap "Play 1 kHz Tone" below to start the sound.
               </Typo>
             </View>
             <View style={styles.instructionItem}>
               <Typo style={styles.bullet}>3.</Typo>
               <Typo style={styles.instructionText}>
-                Use your **phone's physical volume buttons** to adjust the loudness.
+                Use your phone's physical volume buttons to adjust the loudness.
               </Typo>
             </View>
             <View style={styles.instructionItem}>
               <Typo style={styles.bullet}>4.</Typo>
               <Typo style={styles.instructionText}>
-                Set the tone to a **soft, comfortable listening level** (roughly **{CALIBRATION.INSTRUCTION_DB_HL} dB**).
+                Set the tone to a soft, comfortable listening level.
               </Typo>
             </View>
           </View>
@@ -171,7 +171,7 @@ export default function CalibrateScreen() {
           style={styles.tipCard}
         >
           <Typo style={styles.tipText}>
-            ⚠️ This step sets your device's volume as the **reference point** for the entire hearing test. Do not change your phone's volume after this!
+            ⚠️ This step sets your device's volume as the reference point for the entire hearing test. Do not change your phone's volume after this!
           </Typo>
         </Animated.View>
       </View>

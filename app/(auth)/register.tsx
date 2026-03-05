@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, TextInput, TouchableOpacity, StyleSheet, ImageBackground, KeyboardAvoidingView, Platform, ScrollView } from "react-native";
+import { View, TextInput, TouchableOpacity, StyleSheet, ImageBackground, KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator, Alert } from "react-native";
 import { useRouter } from "expo-router";
 import ScreenWrapper from "@/components/ScreenWrapper";
 import { colors, spacingY, spacingX, radius } from "@/constants/theme";
@@ -7,16 +7,106 @@ import { scale, verticalScale } from "@/utils/styling";
 import Typo from "@/components/Typo";
 import Animated, { FadeInDown, FadeInUp } from "react-native-reanimated";
 import AntDesign from '@expo/vector-icons/AntDesign';
+import { useAuth } from "@/contexts/AuthContext";
 
 const AnimatedTouchable = Animated.createAnimatedComponent(TouchableOpacity);
 
 export default function Register() {
   const router = useRouter();
+  const { signUp, loading: authLoading, error: authError, clearError } = useAuth();
   const [email, setEmail] = useState("");
+  const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [emailError, setEmailError] = useState("");
+  const [nameError, setNameError] = useState("");
+  const [passwordError, setPasswordError] = useState("");
+  const [confirmError, setConfirmError] = useState("");
+
+  const validateEmail = (email: string) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email) {
+      return "Email is required";
+    }
+    if (!emailRegex.test(email)) {
+      return "Please enter a valid email";
+    }
+    return "";
+  };
+
+  const validateName = (name: string) => {
+    if (!name) {
+      return "Name is required";
+    }
+    if (name.trim().length < 2) {
+      return "Name must be at least 2 characters";
+    }
+    return "";
+  };
+
+  const validatePassword = (password: string) => {
+    if (!password) {
+      return "Password is required";
+    }
+    if (password.length < 6) {
+      return "Password must be at least 6 characters";
+    }
+    return "";
+  };
+
+  const validateConfirm = (password: string, confirmPassword: string) => {
+    if (!confirmPassword) {
+      return "Please confirm your password";
+    }
+    if (password !== confirmPassword) {
+      return "Passwords do not match";
+    }
+    return "";
+  };
+
+  // Inside register.tsx, replace handleRegister:
+
+const handleRegister = async () => {
+    setEmailError("");
+    setNameError("");
+    setPasswordError("");
+    setConfirmError("");
+    clearError();
+
+    const emailErr = validateEmail(email);
+    const nameErr = validateName(displayName);
+    const passwordErr = validatePassword(password);
+    const confirmErr = validateConfirm(password, confirmPassword);
+
+    if (emailErr || nameErr || passwordErr || confirmErr) {
+      setEmailError(emailErr);
+      setNameError(nameErr);
+      setPasswordError(passwordErr);
+      setConfirmError(confirmErr);
+      return;
+    }
+
+    try {
+      await signUp(email, password, displayName);
+      Alert.alert("Success", "Account created successfully!");
+      router.replace("/(main)/frontpage"); // FIX: Use router.replace
+    } catch (error: any) {
+      const errorCode = error.code;
+      
+      // FIX: Use Firebase error codes for reliable error mapping
+      if (errorCode === "auth/email-already-in-use") {
+        setEmailError("This email is already registered");
+      } else if (errorCode === "auth/weak-password") {
+        setPasswordError("Password is too weak (min 6 characters)");
+      } else if (errorCode === "auth/invalid-email") {
+        setEmailError("Invalid email format");
+      } else {
+        Alert.alert("Registration Error", error.message || "Registration failed. Please try again.");
+      }
+    }
+  };
 
   return (
     <ImageBackground
@@ -49,70 +139,121 @@ export default function Register() {
               style={styles.formCard}
             >
               <View style={styles.inputWrapper}>
+                <Typo style={styles.inputLabel}>Full Name</Typo>
+                <TextInput
+                  style={[styles.input, nameError && styles.inputError]}
+                  placeholder="Enter your full name"
+                  placeholderTextColor={colors.neutral500}
+                  autoCapitalize="words"
+                  value={displayName}
+                  onChangeText={(text) => {
+                    setDisplayName(text);
+                    if (nameError) setNameError("");
+                  }}
+                  editable={!authLoading}
+                />
+                {nameError ? (
+                  <Typo style={styles.errorText}>{nameError}</Typo>
+                ) : null}
+              </View>
+
+              <View style={styles.inputWrapper}>
                 <Typo style={styles.inputLabel}>Email</Typo>
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, emailError && styles.inputError]}
                   placeholder="Enter your email"
                   placeholderTextColor={colors.neutral500}
                   keyboardType="email-address"
                   autoCapitalize="none"
                   value={email}
-                  onChangeText={setEmail}
+                  onChangeText={(text) => {
+                    setEmail(text);
+                    if (emailError) setEmailError("");
+                  }}
+                  editable={!authLoading}
                 />
+                {emailError ? (
+                  <Typo style={styles.errorText}>{emailError}</Typo>
+                ) : null}
               </View>
 
               <View style={styles.inputWrapper}>
                 <Typo style={styles.inputLabel}>Password</Typo>
-                <View style={styles.passwordContainer}>
+                <View style={[styles.passwordContainer, passwordError && styles.inputError]}>
                   <TextInput
                     style={styles.passwordInput}
                     placeholder="Create a password"
                     placeholderTextColor={colors.neutral500}
                     secureTextEntry={!showPassword}
+                    autoCapitalize="none"
                     value={password}
-                    onChangeText={setPassword}
+                    onChangeText={(text) => {
+                      setPassword(text);
+                      if (passwordError) setPasswordError("");
+                    }}
+                    editable={!authLoading}
                   />
                   <TouchableOpacity 
                     onPress={() => setShowPassword(!showPassword)}
                     style={styles.eyeButton}
+                    disabled={authLoading}
                   >
-                    <Typo style={styles.eyeIcon}><AntDesign name={showPassword ? "eye" : "eye-invisible"} size={24} color={colors.white} /></Typo>
+                    <AntDesign name={showPassword ? "eye" : "eye-invisible"} size={20} color={colors.neutral500} />
                   </TouchableOpacity>
                 </View>
+                {passwordError ? (
+                  <Typo style={styles.errorText}>{passwordError}</Typo>
+                ) : null}
               </View>
 
               <View style={styles.inputWrapper}>
                 <Typo style={styles.inputLabel}>Confirm Password</Typo>
-                <View style={styles.passwordContainer}>
+                <View style={[styles.passwordContainer, confirmError && styles.inputError]}>
                   <TextInput
                     style={styles.passwordInput}
                     placeholder="Confirm your password"
                     placeholderTextColor={colors.neutral500}
                     secureTextEntry={!showConfirmPassword}
+                    autoCapitalize="none"
                     value={confirmPassword}
-                    onChangeText={setConfirmPassword}
+                    onChangeText={(text) => {
+                      setConfirmPassword(text);
+                      if (confirmError) setConfirmError("");
+                    }}
+                    editable={!authLoading}
                   />
                   <TouchableOpacity 
                     onPress={() => setShowConfirmPassword(!showConfirmPassword)}
                     style={styles.eyeButton}
+                    disabled={authLoading}
                   >
-                    <Typo style={styles.eyeIcon}><AntDesign name={showPassword ? "eye" : "eye-invisible"} size={24} color={colors.white} /></Typo>
+                    <AntDesign name={showConfirmPassword ? "eye" : "eye-invisible"} size={20} color={colors.neutral500} />
                   </TouchableOpacity>
                 </View>
+                {confirmError ? (
+                  <Typo style={styles.errorText}>{confirmError}</Typo>
+                ) : null}
               </View>
 
               <AnimatedTouchable 
                 entering={FadeInDown.duration(600).delay(200).springify()}
-                style={styles.registerBtn}
+                style={[styles.registerBtn, authLoading && styles.registerBtnDisabled]}
                 activeOpacity={0.85}
+                onPress={handleRegister}
+                disabled={authLoading}
               >
-                <Typo style={styles.registerText}>Create Account</Typo>
+                {authLoading ? (
+                  <ActivityIndicator color={colors.white} size="small" />
+                ) : (
+                  <Typo style={styles.registerText}>Create Account</Typo>
+                )}
               </AnimatedTouchable>
 
               <AnimatedTouchable 
                 entering={FadeInDown.duration(600).delay(300).springify()}
                 onPress={() => router.replace("/(auth)/login")}
                 activeOpacity={0.7}
+                disabled={authLoading}
               >
                 <Typo style={styles.linkText}>
                   Already have an account? <Typo style={styles.linkTextBold}>Login</Typo>
@@ -125,6 +266,7 @@ export default function Register() {
               style={styles.skipBtn}
               onPress={() => router.replace("/(main)/frontpage")}
               activeOpacity={0.7}
+              disabled={authLoading}
             >
               <Typo style={styles.skipText}>Skip for now</Typo>
             </AnimatedTouchable>
@@ -201,13 +343,23 @@ const styles = StyleSheet.create({
   },
   input: {
     backgroundColor: colors.neutral900,
-    color: colors.text,
+    color: colors.white,
     borderRadius: radius._12,
     paddingVertical: verticalScale(14),
     paddingHorizontal: scale(16),
     fontSize: scale(15),
     borderWidth: 1.5,
     borderColor: colors.neutral300,
+  },
+  inputError: {
+    borderColor: colors.red,
+    borderWidth: 2,
+  },
+  errorText: {
+    color: colors.red,
+    fontSize: scale(12),
+    marginTop: spacingY._5,
+    fontWeight: "500",
   },
   passwordContainer: {
     flexDirection: "row",
@@ -219,7 +371,7 @@ const styles = StyleSheet.create({
   },
   passwordInput: {
     flex: 1,
-    color: colors.text,
+    color: colors.white,
     paddingVertical: verticalScale(14),
     paddingHorizontal: scale(16),
     fontSize: scale(15),
@@ -243,6 +395,10 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.3,
     shadowRadius: 6,
+  },
+  registerBtnDisabled: {
+    backgroundColor: colors.neutral600,
+    elevation: 0,
   },
   registerText: {
     color: colors.white,

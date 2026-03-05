@@ -37,7 +37,7 @@ export default function TestScreen() {
               onPress={startCombinedTest}
               activeOpacity={0.85}
             >
-              <Typo style={styles.btnTextPrimary}>Start Combined Air Test</Typo>
+              <Typo style={styles.btnTextPrimary}>Start Test</Typo>
             </AnimatedTouchable>
           </View>
         </View>

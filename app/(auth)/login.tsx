@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, TextInput, TouchableOpacity, StyleSheet, ImageBackground, KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator } from "react-native";
+import { View, TextInput, TouchableOpacity, StyleSheet, ImageBackground, KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator, Alert } from "react-native";
 import { useRouter } from "expo-router";
 import ScreenWrapper from "@/components/ScreenWrapper";
 import { colors, spacingY, spacingX, radius } from "@/constants/theme";
@@ -7,15 +7,16 @@ import { scale, verticalScale } from "@/utils/styling";
 import Typo from "@/components/Typo";
 import Animated, { FadeInDown, FadeInUp } from "react-native-reanimated";
 import AntDesign from '@expo/vector-icons/AntDesign';
+import { useAuth } from "@/contexts/AuthContext";
 
 const AnimatedTouchable = Animated.createAnimatedComponent(TouchableOpacity);
 
 export default function Login() {
   const router = useRouter();
+  const { logIn, loading: authLoading, error: authError, clearError } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
   const [emailError, setEmailError] = useState("");
   const [passwordError, setPasswordError] = useState("");
 
@@ -40,36 +41,41 @@ export default function Login() {
     return "";
   };
 
-  const handleLogin = async () => {
-    // Clear previous errors
-    setEmailError("");
-    setPasswordError("");
+  // Inside login.tsx, replace handleLogin:
 
-    // Validate fields
-    const emailErr = validateEmail(email);
-    const passwordErr = validatePassword(password);
+const handleLogin = async () => {
+    setEmailError("");
+    setPasswordError("");
+    clearError();
 
-    if (emailErr || passwordErr) {
-      setEmailError(emailErr);
-      setPasswordError(passwordErr);
-      return;
-    }
+    const emailErr = validateEmail(email);
+    const passwordErr = validatePassword(password);
 
-    // Start loading
-    setIsLoading(true);
+    if (emailErr || passwordErr) {
+      setEmailError(emailErr);
+      setPasswordError(passwordErr);
+      return;
+    }
 
-    try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      // Handle successful login here
-      router.replace("/(main)/frontpage");
-    } catch (error) {
-      setPasswordError("Login failed. Please try again.");
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    try {
+      await logIn(email, password);
+      // FIX: Use router.replace to prevent going back to login after success
+      router.replace("/(main)/frontpage"); 
+    } catch (error: any) {
+      const errorCode = error.code;
+      
+      // FIX: Use Firebase error codes for reliable error mapping
+      if (errorCode === "auth/user-not-found" || errorCode === "auth/invalid-credential") {
+        setEmailError("Invalid email or password");
+      } else if (errorCode === "auth/wrong-password") {
+        setPasswordError("Invalid email or password");
+      } else if (errorCode === "auth/invalid-email") {
+        setEmailError("Invalid email format");
+      } else {
+        Alert.alert("Login Error", error.message || "Login failed. Please try again.");
+      }
+    }
+  };
 
   return (
     <ImageBackground
@@ -114,7 +120,7 @@ export default function Login() {
                     setEmail(text);
                     if (emailError) setEmailError("");
                   }}
-                  editable={!isLoading}
+                  editable={!authLoading}
                 />
                 {emailError ? (
                   <Typo style={styles.errorText}>{emailError}</Typo>
@@ -129,17 +135,18 @@ export default function Login() {
                     placeholder="Enter your password"
                     placeholderTextColor={colors.neutral500}
                     secureTextEntry={!showPassword}
+                    autoCapitalize="none"
                     value={password}
                     onChangeText={(text) => {
                       setPassword(text);
                       if (passwordError) setPasswordError("");
                     }}
-                    editable={!isLoading}
+                    editable={!authLoading}
                   />
                   <TouchableOpacity 
                     onPress={() => setShowPassword(!showPassword)}
                     style={styles.eyeButton}
-                    disabled={isLoading}
+                    disabled={authLoading}
                   >
                     <AntDesign 
                       name={showPassword ? "eye" : "eye-invisible"} 
@@ -156,12 +163,12 @@ export default function Login() {
 
               <AnimatedTouchable 
                 entering={FadeInDown.duration(600).delay(200).springify()}
-                style={[styles.loginBtn, isLoading && styles.loginBtnDisabled]}
+                style={[styles.loginBtn, authLoading && styles.loginBtnDisabled]}
                 activeOpacity={0.85}
                 onPress={handleLogin}
-                disabled={isLoading}
+                disabled={authLoading}
               >
-                {isLoading ? (
+                {authLoading ? (
                   <ActivityIndicator color={colors.white} size="small" />
                 ) : (
                   <Typo style={styles.loginText}>Login</Typo>
@@ -172,7 +179,7 @@ export default function Login() {
                 entering={FadeInDown.duration(600).delay(300).springify()}
                 onPress={() => router.replace("/(auth)/register")}
                 activeOpacity={0.7}
-                disabled={isLoading}
+                disabled={authLoading}
               >
                 <Typo style={styles.linkText}>
                   Don't have an account? <Typo style={styles.linkTextBold}>Register</Typo>
@@ -185,7 +192,7 @@ export default function Login() {
               style={styles.skipBtn}
               onPress={() => router.replace("/(main)/frontpage")}
               activeOpacity={0.7}
-              disabled={isLoading}
+              disabled={authLoading}
             >
               <Typo style={styles.skipText}>Skip for now</Typo>
             </AnimatedTouchable>
@@ -263,7 +270,7 @@ const styles = StyleSheet.create({
   },
   input: {
     backgroundColor: colors.neutral900,
-    color: colors.text,
+    color: colors.white,
     borderRadius: radius._12,
     paddingVertical: verticalScale(14),
     paddingHorizontal: scale(16),
@@ -291,7 +298,7 @@ const styles = StyleSheet.create({
   },
   passwordInput: {
     flex: 1,
-    color: colors.text,
+    color: colors.white,
     paddingVertical: verticalScale(14),
     paddingHorizontal: scale(16),
     fontSize: scale(15),

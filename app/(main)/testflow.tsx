@@ -6,10 +6,11 @@ import { colors, spacingX, spacingY, radius } from "@/constants/theme";
 import { scale, verticalScale } from "@/utils/styling";
 import { useAudioPlayer } from "expo-audio";
 import Typo from "@/components/Typo";
-import Animated, { FadeInDown, FadeInUp, FadeIn } from "react-native-reanimated";
+import Animated, { FadeInDown, FadeInUp, FadeIn, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from "react-native-reanimated";
 import { Entypo } from "@expo/vector-icons";
 
 const AnimatedTouchable = Animated.createAnimatedComponent(TouchableOpacity);
+const AnimatedView = Animated.createAnimatedComponent(View);
 
 const FREQUENCIES = [250, 500, 1000, 2000, 4000, 8000];
 
@@ -44,6 +45,10 @@ const TONE_DURATION_MS = 1000;export default function TestFlowScreen() {
   const [index, setIndex] = useState(0);
   const [dbLevel, setDbLevel] = useState(30);
   const [thresholds, setThresholds] = useState<any[]>([]);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [showPlayingIndicator, setShowPlayingIndicator] = useState(false);
+
+  const pulseScale = useSharedValue(1);
 
   const freq = FREQUENCIES[index];
 
@@ -83,6 +88,14 @@ const TONE_DURATION_MS = 1000;export default function TestFlowScreen() {
         await player.pause();
       } catch (_) { }
 
+      setIsPlaying(true);
+      setShowPlayingIndicator(true);
+      pulseScale.value = withRepeat(
+        withTiming(1.1, { duration: 500 }),
+        -1,
+        true
+      );
+
       const volume = dbToVolume(dbLevel, freq, isBoneConduction);
       player.volume = volume;
       await player.seekTo(0);
@@ -92,10 +105,17 @@ const TONE_DURATION_MS = 1000;export default function TestFlowScreen() {
         try {
           await player.pause();
         } catch (e) { }
+        setIsPlaying(false);
+        pulseScale.value = 1;
+        setTimeout(() => {
+          setShowPlayingIndicator(false);
+        }, 500);
       }, TONE_DURATION_MS);
     } catch (e) {
       console.error("Playback error:", e);
       Alert.alert("Audio Error", "Could not play the tone.");
+      setIsPlaying(false);
+      pulseScale.value = 1;
     }
   }
 
@@ -106,6 +126,8 @@ const TONE_DURATION_MS = 1000;export default function TestFlowScreen() {
           player.pause();
         } catch (_) { }
       }
+      setIsPlaying(false);
+      pulseScale.value = 1;
     };
   }, [player, freq]);
 
@@ -160,6 +182,12 @@ const TONE_DURATION_MS = 1000;export default function TestFlowScreen() {
 
   const progress = ((index + 1) / FREQUENCIES.length) * 100;
 
+  const pulseAnimatedStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ scale: pulseScale.value }],
+    };
+  });
+
   return (
     <ScreenWrapper showPattern>
       <View style={styles.container}>
@@ -191,10 +219,19 @@ const TONE_DURATION_MS = 1000;export default function TestFlowScreen() {
           entering={FadeInDown.duration(500).springify()}
           style={styles.controlsContainer}
         >
-          <AnimatedTouchable style={styles.playBtn} onPress={handlePlay} activeOpacity={0.85}>
-            <Entypo name="controller-play" size={24} color={colors.white} />
-            <Typo style={styles.playText}>Play Tone</Typo>
-          </AnimatedTouchable>
+          <AnimatedView style={[styles.playBtnWrapper, pulseAnimatedStyle]}>
+            <AnimatedTouchable style={styles.playBtn} onPress={handlePlay} activeOpacity={0.85} disabled={isPlaying}>
+              <Entypo name="controller-play" size={24} color={colors.white} />
+              <Typo style={styles.playText}>{isPlaying ? "Playing..." : "Play Tone"}</Typo>
+            </AnimatedTouchable>
+          </AnimatedView>
+
+          {showPlayingIndicator && (
+            <Animated.View entering={FadeIn} style={styles.playingIndicator}>
+              <View style={[styles.pulsingDot, isPlaying && styles.pulsingDotActive]} />
+              <Typo style={styles.playingText}>{isPlaying ? "Tone is playing..." : "Tone finished"}</Typo>
+            </Animated.View>
+          )}
 
           <View style={styles.volumeSection}>
             <Typo style={styles.volumeTitle}>Adjust Intensity</Typo>
@@ -419,6 +456,35 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     marginBottom: spacingY._35,
+  },
+  playBtnWrapper: {
+    alignItems: "center",
+  },
+  playingIndicator: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacingX._10,
+    marginTop: spacingY._15,
+    paddingHorizontal: spacingX._20,
+    paddingVertical: spacingY._12,
+    backgroundColor: colors.primary + "20",
+    borderRadius: radius._12,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+  },
+  pulsingDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: colors.primary,
+  },
+  pulsingDotActive: {
+    opacity: 1,
+  },
+  playingText: {
+    color: colors.primary,
+    fontWeight: "600",
+    fontSize: scale(14),
   },
   playText: {
     color: colors.white,
